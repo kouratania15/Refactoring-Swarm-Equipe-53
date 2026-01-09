@@ -1,8 +1,9 @@
 import subprocess
+import sys
 
 def run_pylint(target_dir: str) -> dict:
     result = subprocess.run(
-        ["pylint", target_dir, "--output-format=json"],
+        [sys.executable, "-m", "pylint", target_dir, "--output-format=json"],
         capture_output=True,
         text=True
     )

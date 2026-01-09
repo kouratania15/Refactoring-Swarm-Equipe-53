@@ -1,10 +1,14 @@
 import subprocess
+import sys
+import os
 
 def run_pytest(target_dir: str) -> dict:
+    # Run pytest from the target directory to ensure proper imports
     result = subprocess.run(
-        ["pytest", target_dir],
+        [sys.executable, "-m", "pytest", ".", "-v"],
         capture_output=True,
-        text=True
+        text=True,
+        cwd=target_dir
     )
 
     return {
