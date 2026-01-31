@@ -1,0 +1,13 @@
+{
+  "timestamp": "2026-01-31T17:17:30.559463",
+  "status": "PARTIAL",
+  "message": "Fixer could not apply fixes",
+  "target_directory": "sandbox\\test_code",
+  "iterations": 1,
+  "max_iterations": 10,
+  "duration_seconds": 3.908056,
+  "summary": {
+    "total_issues_detected": 1,
+    "total_files_modified": 0
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "timestamp": "2026-01-31T16:32:52.630408",
+  "status": "STOPPED",
+  "message": "Judge stopped process: Could not analyze tests",
+  "target_directory": "sandbox\\test_code",
+  "iterations": 1,
+  "max_iterations": 10,
+  "duration_seconds": 5.590953,
+  "summary": {
+    "total_issues_detected": 2,
+    "total_files_modified": 1
+  }
+}
