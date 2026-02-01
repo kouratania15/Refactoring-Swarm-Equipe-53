@@ -23,13 +23,13 @@ from src.agents.orchestrator import CodeRefactorOrchestrator, validate_environme
 def parse_arguments():
     """Parse les arguments de la ligne de commande."""
     parser = argparse.ArgumentParser(
-        description="Système de refactoring Python automatique multi-agents",
+        description="Système de refactoring Python automatique multi-agents (LangGraph + Gemini)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Exemples d'utilisation:
   %(prog)s --target_dir ./sandbox/test_code
   %(prog)s --target_dir ./my_project --max-iterations 10
-  %(prog)s --target_dir ./code --model mistral-large-latest
+  %(prog)s --target_dir ./code --model gemini-1.5-flash
   %(prog)s --target_dir ./app --max-iterations 5 --verbose
 
 Le système utilise 3 agents:
@@ -38,7 +38,7 @@ Le système utilise 3 agents:
   - Judge: Valide les corrections avec des tests
 
 Configuration:
-  - Créez un fichier .env avec MISTRAL_API_KEY=votre_clé
+  - Créez un fichier .env avec GOOGLE_API_KEY=votre_clé
   - Assurez-vous d'avoir pytest installé pour les tests
         """
     )
@@ -60,13 +60,8 @@ Configuration:
     parser.add_argument(
         "--model",
         type=str,
-        default="mistral-large-latest",
-        choices=[
-            "mistral-large-latest",
-            "mistral-medium-latest",
-            "mistral-small-latest"
-        ],
-        help="Modèle Mistral à utiliser (défaut: mistral-large-latest)"
+        default="gemini-2.5-flash",
+        help="Modèle Gemini à utiliser (défaut: gemini-2.5-flash)"
     )
     
     parser.add_argument(
@@ -87,9 +82,9 @@ Configuration:
 def print_banner():
     """Prints the application banner."""
     print("\n" + "="*70)
-    print("PYTHON REFACTORING SYSTEM - MULTI-AGENT")
+    print("PYTHON REFACTORING SYSTEM - MULTI-AGENT (Gemini Edition)")
     print("="*70)
-    print("Agents: Auditor (detects issues) -> Fixer (fixes) -> Judge (validates)")
+    print("Agents: Auditor -> Fixer -> Judge (Orchestrated by LangGraph)")
     print("="*70 + "\n")
 
 
@@ -166,8 +161,8 @@ def main():
         print("\n[ERROR] Configuration invalid. Fix errors above.")
         print("\nTo configure:")
         print("1. Create .env file at project root")
-        print("2. Add: MISTRAL_API_KEY=your_api_key")
-        print("3. Get your key from: https://console.mistral.ai/")
+        print("2. Add: GOOGLE_API_KEY=your_key")
+        print("3. Get your key from: https://aistudio.google.com/")
         return 1
     
     # Créer l'orchestrateur
@@ -193,27 +188,9 @@ def main():
             return 0
         elif stats["final_status"] in ["PARTIAL", "STOPPED"]:
             print("⚠️  Refactoring partiel - voir le résumé ci-dessus")
-            
-            # Afficher des conseils selon le statut
-            if stats["total_files_modified"] == 0:
-                print("\n💡 Conseils:")
-                print("  - Vérifiez que les erreurs détectées sont bien des erreurs")
-                print("  - Augmentez --max-iterations si nécessaire")
-                print("  - Utilisez --verbose pour plus de détails")
-            
             return 0
         else:
             print("❌ Refactoring incomplet - intervention requise")
-            
-            # Conseils selon le type d'échec
-            if stats["final_status"] == "NEEDS_HUMAN":
-                print("\n💡 Une intervention manuelle est nécessaire.")
-                print("   Consultez les logs pour identifier le problème.")
-            elif stats["final_status"] == "MAX_ITERATIONS":
-                print("\n💡 Nombre maximum d'itérations atteint.")
-                print("   Relancez avec --max-iterations plus élevé")
-                print(f"   Exemple: python main.py --target_dir {args.target_dir} --max-iterations 10")
-            
             return 1
     
     except KeyboardInterrupt:

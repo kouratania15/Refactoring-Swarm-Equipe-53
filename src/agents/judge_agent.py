@@ -1,30 +1,32 @@
+
 import os
 import sys
 import json
 import re
-from mistralai import Mistral
+import time
 from pathlib import Path
 from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from src.tools.run_pytest import run_pytest
-from logs.logger import log_experiment, ActionType
+from src.utils.logger import log_experiment, ActionType
 from src.prompts.judge_prompt import get_judge_prompt
+from src.utils.llm_factory import get_llm
 
 load_dotenv()
 
 
 class JudgeAgent:
-    """Agent Juge : Exécute les tests et valide le code."""
+    """Agent Juge : Exécute les tests et valide le code (Gemini Version)."""
 
-    def __init__(self, model_name="mistral-large-latest"):
+    def __init__(self, model_name="gemini-1.5-flash"):
         self.model_name = model_name
         self.agent_name = "Judge_Agent"
-        api_key = os.getenv("MISTRAL_API_KEY")
-        if not api_key:
-            raise ValueError("MISTRAL_API_KEY not found in .env")
-        self.client = Mistral(api_key=api_key)
-        self.model = model_name
+        try:
+             self.llm = get_llm(model_name=model_name)
+        except Exception as e:
+             print(f"Error initializing LLM: {e}")
+             raise
 
     def run_tests(self, target_dir: Path) -> dict:
         """Run tests and analyze results."""
@@ -135,12 +137,11 @@ class JudgeAgent:
                 test_output=f"Success: {success}\n\nFailed tests: {failed_tests}\n\nError details:\n{error_details}\n\nFull output:\n{stdout[:500]}\n\nStderr:\n{stderr[:500]}"
             )
 
-            response = self.client.chat.complete(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}]
-            )
-
-            llm_output = response.choices[0].message.content
+            # LangChain Invoke via Gemini (with rate limit pause)
+            print("   ⏳ Rate Check: Waiting 10s before Judge Analysis...")
+            time.sleep(10)
+            response = self.llm.invoke(prompt)
+            llm_output = response.content
             
             # Try to parse JSON response with improved extraction
             try:

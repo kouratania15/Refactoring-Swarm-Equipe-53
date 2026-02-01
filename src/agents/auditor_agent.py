@@ -1,8 +1,9 @@
+
 import os
 import sys
 import json
 import ast
-from mistralai import Mistral
+import time
 from pathlib import Path
 from dotenv import load_dotenv
 import traceback
@@ -10,22 +11,25 @@ import traceback
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from src.tools.file_operations import read_file
 from src.tools.run_pylint import run_pylint
-from logs.logger import log_experiment, ActionType
+from src.utils.logger import log_experiment, ActionType
 from src.prompts.auditor_prompt import get_auditor_prompt
+from src.utils.llm_factory import get_llm
+
 load_dotenv()
 
 
 class AuditorAgent:
-    """Agent Auditeur : Détecte les erreurs de syntaxe et logique."""
+    """Agent Auditeur : Détecte les erreurs de syntaxe et logique (Gemini Version)."""
     
-    def __init__(self, model_name="mistral-large-latest"):
+    def __init__(self, model_name="gemini-1.5-flash"):
         self.model_name = model_name
         self.agent_name = "Auditor_Agent"
-        api_key = os.getenv("MISTRAL_API_KEY")
-        if not api_key:
-            raise ValueError("MISTRAL_API_KEY not found in .env")
-        self.client = Mistral(api_key=api_key)
-        self.model = model_name
+        try:
+            self.llm = get_llm(model_name=model_name)
+        except Exception as e:
+             # Fallback if specific model fails, though factory handles key check
+             print(f"Error initializing LLM: {e}")
+             raise
 
     def analyze(self, target_dir: Path) -> dict:
         """Analyze all Python files in target directory."""
@@ -86,8 +90,6 @@ class AuditorAgent:
         lines = code.split('\n')
         for i, line in enumerate(lines, 1):
             stripped = line.strip()
-            
-            # Check for missing closing parenthesis on def/class
             if stripped.startswith(('def ', 'class ')):
                 if '(' in stripped and ')' not in stripped:
                     errors.append(json.dumps({
@@ -98,7 +100,6 @@ class AuditorAgent:
                         "fix_instruction": f"Add missing ')' on line {i}"
                     }))
             
-            # Check for missing colons
             if stripped.startswith(('def ', 'class ', 'if ', 'elif ', 'for ', 'while ', 'try:', 'except', 'with ')):
                 if not stripped.endswith(':') and not stripped.endswith('('):
                     errors.append(json.dumps({
@@ -120,19 +121,18 @@ class AuditorAgent:
                 pylint_issues=pylint_issues or "No issues detected"
             )
 
-            # First LLM call
-            response1 = self.client.chat.complete(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}]
-            )
-            llm_output_1 = response1.choices[0].message.content
+            # LangChain Invoke via Gemini (with rate limit pause)
+            print("   ⏳ Rate Check: Waiting 10s before LLM call...")
+            time.sleep(10)
+            response1 = self.llm.invoke(prompt)
+            llm_output_1 = response1.content
             print(f"   [LLM RAW]: {llm_output_1[:400]}")
 
             # Try to parse the first output
             issues = self._parse_llm_response(llm_output_1)
             parsed_first = bool(issues) or ('"issues"' in (llm_output_1 or ""))
 
-            # If first parse failed (malformed JSON), ask LLM to reformat the previous response
+            # If first parse failed (malformed JSON), ask LLM to reformat
             llm_output_2 = None
             parsed_second = False
             if not parsed_first and '{' in llm_output_1:
@@ -145,11 +145,9 @@ class AuditorAgent:
                 )
 
                 try:
-                    response2 = self.client.chat.complete(
-                        model=self.model,
-                        messages=[{"role": "user", "content": reformat_prompt}]
-                    )
-                    llm_output_2 = response2.choices[0].message.content
+                    time.sleep(5) # Shorter pause for retry
+                    response2 = self.llm.invoke(reformat_prompt)
+                    llm_output_2 = response2.content
                     issues2 = self._parse_llm_response(llm_output_2)
                     parsed_second = bool(issues2) or ('"issues"' in (llm_output_2 or ""))
                     if issues2:
@@ -157,7 +155,7 @@ class AuditorAgent:
                 except Exception:
                     parsed_second = False
 
-            # Log both outputs for diagnosis
+            # Log
             try:
                 log_experiment(
                     agent_name=self.agent_name,
@@ -184,14 +182,11 @@ class AuditorAgent:
     def _parse_llm_response(self, response: str) -> list:
         """Parse LLM response to extract issues."""
         issues = []
-        
         try:
-            # Find the first { and last }
             start = response.find('{')
             if start < 0:
                 return []
             
-            # Count braces to find the matching closing brace
             brace_count = 0
             end = -1
             for i in range(start, len(response)):
@@ -210,10 +205,10 @@ class AuditorAgent:
                     return data.get("issues", [])
         except json.JSONDecodeError:
             pass
-        except Exception as e:
+        except Exception:
             pass
 
-        # Fallback: extract lines starting with "-"
+        # Fallback
         for line in response.split('\n'):
             if line.strip().startswith('-'):
                 issues.append(line.strip())
